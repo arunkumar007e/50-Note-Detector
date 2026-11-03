@@ -15,6 +15,19 @@ The original photos are not copied into Git.
 See [the initial dataset inventory](reports/dataset_inventory.md) for per-folder
 counts and inspection notes.
 
+## Dataset Download
+
+The complete dataset contains 311 original images (approximately 2.51 GiB).
+
+**Download Dataset:** [Google Drive Dataset Link](https://drive.google.com/file/d/1XxeiSXhBm6tZHcI7kXXh-H97p4wOC4x2/view?usp=sharing)
+
+Dataset includes:
+- ₹50 front and back images (positive samples)
+- ₹10, ₹20, ₹100, ₹200, ₹500 note images (negative samples)
+
+Note: Download the dataset ZIP and extract it into the project directory before training.
+
+
 ## Requirements
 
 - Python 3.10–3.12
