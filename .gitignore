@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+
+# The supplied phone photos and generated training splits stay local.
+/Dataset/
+/yolo_data/
+/annotations/labels/
+/runs/
+/reports/*.json
+/reports/*.csv
+/model.onnx
+/models/

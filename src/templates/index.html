@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>INR 50 Note Detector</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; }
+    body { max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #17211b; }
+    h1 { margin-bottom: .35rem; }
+    #status { padding: .8rem 1rem; border-radius: .5rem; background: #e8f4eb; }
+    #status.warning { background: #fff3cd; }
+    #help { color: #46534a; line-height: 1.5; }
+    button { padding: .65rem 1rem; margin: .5rem .4rem .8rem 0; cursor: pointer; }
+    button:disabled { cursor: not-allowed; }
+    #camera { position: relative; width: 100%; background: #111; }
+    video { display: block; width: 100%; max-height: 70vh; object-fit: contain; }
+    #boxes { position: absolute; inset: 0; pointer-events: none; }
+    .box { position: absolute; border: 3px solid #28dc64; box-sizing: border-box; }
+    .label { position: absolute; left: 0; top: -1.7rem; padding: .15rem .35rem;
+      color: white; background: #14532d; font-size: .9rem; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <h1>INR 50 Note Detector</h1>
+  <p id="status" role="status">Checking detector...</p>
+  <p id="help">The camera runs in your browser. Frames are processed by this
+    computer's local detector and are not sent to an external service.</p>
+  <button id="start" type="button" disabled>Start camera</button>
+  <button id="stop" type="button" disabled>Stop camera</button>
+  <div id="camera" hidden>
+    <video id="video" autoplay muted playsinline></video>
+    <div id="boxes"></div>
+  </div>
+  <script>
+    const statusBox = document.querySelector("#status");
+    const startButton = document.querySelector("#start");
+    const stopButton = document.querySelector("#stop");
+    const video = document.querySelector("#video");
+    const cameraView = document.querySelector("#camera");
+    const boxes = document.querySelector("#boxes");
+    const frameCanvas = document.createElement("canvas");
+    let stream;
+    let active = false;
+
+    async function checkStatus() {
+      try {
+        const response = await fetch("/api/status");
+        const result = await response.json();
+        statusBox.textContent = result.model_available
+          ? "Detector ready. Start the camera to look for INR 50 notes."
+          : "No model.onnx found. Annotate the INR50 images, prepare the dataset, train, evaluate, then export ONNX.";
+        statusBox.classList.toggle("warning", !result.model_available);
+        startButton.disabled = !result.model_available;
+      } catch (error) {
+        statusBox.textContent = `Could not connect to the local detector: ${error.message}`;
+        statusBox.classList.add("warning");
+      }
+    }
+
+    function showDetections(result) {
+      boxes.replaceChildren();
+      for (const detection of result.detections) {
+        const box = document.createElement("div");
+        box.className = "box";
+        box.style.left = `${100 * detection.x1 / result.width}%`;
+        box.style.top = `${100 * detection.y1 / result.height}%`;
+        box.style.width = `${100 * (detection.x2 - detection.x1) / result.width}%`;
+        box.style.height = `${100 * (detection.y2 - detection.y1) / result.height}%`;
+        const label = document.createElement("span");
+        label.className = "label";
+        label.textContent = `INR 50 ${(detection.confidence * 100).toFixed(0)}%`;
+        box.append(label);
+        boxes.append(box);
+      }
+    }
+
+    async function detectFrames() {
+      if (!active || video.videoWidth === 0) return;
+      frameCanvas.width = video.videoWidth;
+      frameCanvas.height = video.videoHeight;
+      frameCanvas.getContext("2d").drawImage(video, 0, 0);
+      try {
+        const frame = await new Promise(resolve =>
+          frameCanvas.toBlob(resolve, "image/jpeg", 0.8));
+        if (!frame) throw new Error("Could not capture a camera frame.");
+        const form = new FormData();
+        form.append("frame", frame, "webcam.jpg");
+        const response = await fetch("/api/detect", { method: "POST", body: form });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Detection failed.");
+        showDetections(result);
+        statusBox.textContent = result.detections.length
+          ? `Found ${result.detections.length} possible INR 50 note(s).`
+          : "Camera is running. No INR 50 notes detected.";
+      } catch (error) {
+        statusBox.textContent = error.message;
+        statusBox.classList.add("warning");
+      }
+      if (active) window.setTimeout(detectFrames, 500);
+    }
+
+    startButton.addEventListener("click", async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" }, audio: false
+        });
+        video.srcObject = stream;
+        cameraView.hidden = false;
+        active = true;
+        startButton.disabled = true;
+        stopButton.disabled = false;
+        video.addEventListener("loadedmetadata", detectFrames, { once: true });
+      } catch (error) {
+        statusBox.textContent = `Could not start the camera: ${error.message}`;
+        statusBox.classList.add("warning");
+      }
+    });
+
+    stopButton.addEventListener("click", () => {
+      active = false;
+      if (stream) stream.getTracks().forEach(track => track.stop());
+      video.srcObject = null;
+      boxes.replaceChildren();
+      cameraView.hidden = true;
+      startButton.disabled = false;
+      stopButton.disabled = true;
+      checkStatus();
+    });
+
+    checkStatus();
+  </script>
+</body>
+</html>
